@@ -14,6 +14,7 @@ jobs:
 
       - name: Create bootstraps
         run: |
+          set -e
           sudo apt update
           sudo apt install -y debootstrap perl bubblewrap
           sudo ./create-ubuntu-bootstraps.sh
