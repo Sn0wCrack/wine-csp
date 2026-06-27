@@ -1,4 +1,4 @@
-name: Wine-CSP CI
+name: Build
 
 on:
   release:

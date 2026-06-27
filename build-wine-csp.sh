@@ -11,7 +11,8 @@ REPO_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 CONFIG_FILE="${REPO_ROOT}/configs/${WINE_VERSION}.cfg"
 PATCH_DIR="${REPO_ROOT}/patches/${WINE_VERSION}"
 BUILD_DIR="${HOME}/wine-csp-build"
-WINE_TKG_DIR="${BUILD_DIR}/wine-tkg-git"
+WINE_TKG_REPO_DIR="${BUILD_DIR}/wine-tkg-git"
+WINE_TKG_DIR="${WINE_TKG_REPO_DIR}/wine-tkg-git"
 
 if [ ! -f "${CONFIG_FILE}" ]; then
     echo "ERROR: Config file not found: ${CONFIG_FILE}"
@@ -27,7 +28,7 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
 echo "=== Cloning wine-tkg-git ==="
-git clone --depth=1 https://github.com/Frogging-Family/wine-tkg-git.git "${WINE_TKG_DIR}"
+git clone --depth=1 https://github.com/Frogging-Family/wine-tkg-git.git "${WINE_TKG_REPO_DIR}"
 
 echo "=== Installing config ==="
 cp "${CONFIG_FILE}" "${WINE_TKG_DIR}/customization.cfg"
