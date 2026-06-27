@@ -68,8 +68,8 @@ deb-src ${CHROOT_MIRROR} ${CHROOT_DISTRO}-security main universe
 SOURCESEOF
 
 apt-get update
-apt-get -y install software-properties-common
-add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt-get -y install software-properties-common ca-certificates
+add-apt-repository -y ppa:ubuntu-toolchain-r/ppa
 add-apt-repository -y ppa:cybermax-dexter/mingw-w64-backport
 apt-get update
 apt-get -y upgrade
