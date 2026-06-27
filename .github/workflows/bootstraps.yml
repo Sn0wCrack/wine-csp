@@ -1,0 +1,27 @@
+name: Bootstraps CI
+
+on:
+  schedule:
+    - cron: 0 0 1 */2 *
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create bootstraps
+        run: |
+          sudo apt update
+          sudo apt install -y debootstrap perl bubblewrap
+          sudo ./create-ubuntu-bootstraps.sh
+          cd /opt
+          sudo tar -I "xz -T0 -9" -cpf bootstraps.tar.xz chroots
+          sha256sum bootstraps.tar.xz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Bootstraps
+          path: /opt/bootstraps.tar.xz
+          retention-days: 90
