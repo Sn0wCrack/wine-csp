@@ -48,7 +48,7 @@ create_build_script () {
 
     cat > "${chroot_path}"/opt/prepare.sh << SCRIPTEOF
 #!/bin/bash
-set -e
+set -eux
 
 export DEBIAN_FRONTEND=noninteractive
 export LANG=en_US.UTF-8
