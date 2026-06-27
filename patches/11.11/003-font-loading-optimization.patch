@@ -1,0 +1,164 @@
+diff --git a/dlls/win32u/font.c b/dlls/win32u/font.c
+index dcc75e8096b..bf4954b1516 100644
+--- a/dlls/win32u/font.c
++++ b/dlls/win32u/font.c
+@@ -6518,7 +6518,7 @@ static void load_directory_fonts( WCHAR *path, UINT flags )
+             {
+                 memcpy( path + len, info->FileName, info->FileNameLength );
+                 path[len + info->FileNameLength / sizeof(WCHAR)] = 0;
+-                font_funcs->add_font( path, flags );
++                font_funcs->add_font( path, flags | ADDFONT_ADD_TO_CACHE );
+             }
+             if (!info->NextEntryOffset) break;
+             info = (FILE_BOTH_DIR_INFORMATION *)((char *)info + info->NextEntryOffset);
+@@ -6749,9 +6749,9 @@ UINT font_init(void)
+     if (!(font_funcs = init_freetype_lib()))
+         return dpi;
+ 
+-    load_system_bitmap_fonts();
+-    load_file_system_fonts();
+-    font_funcs->load_fonts();
++    /* Check the volatile font cache before doing expensive file scanning.
++     * The cache is created by the first process in a Wine session and persists
++     * as long as wineserver runs. Subsequent processes skip all file I/O. */
+ 
+     attr.Attributes = OBJ_OPENIF;
+     attr.ObjectName = &name;
+@@ -6764,20 +6764,30 @@ UINT font_init(void)
+     wine_fonts_cache_key = reg_create_key( wine_fonts_key, cacheW, sizeof(cacheW),
+                                            REG_OPTION_VOLATILE, &disposition );
+ 
+-    if (disposition == REG_CREATED_NEW_KEY)
+-    {
+-        load_registry_fonts();
+-        update_external_font_keys();
+-    }
+-
+-    NtReleaseMutant( mutex, NULL );
+-
+     if (disposition != REG_CREATED_NEW_KEY)
+     {
+-        load_registry_fonts();
++        /* Cache exists - load fonts from cache, skip expensive file scanning */
++        load_system_bitmap_fonts();
+         load_font_list_from_cache();
++        NtReleaseMutant( mutex, NULL );
++        reorder_font_list();
++        load_gdi_font_subst();
++        load_gdi_font_replacements();
++        load_system_links();
++        dump_gdi_font_list();
++        dump_gdi_font_subst();
++        return dpi;
+     }
+ 
++    /* No cache - do full scan + parsing and populate the cache */
++    load_system_bitmap_fonts();
++    load_file_system_fonts();
++    font_funcs->load_fonts();
++    load_registry_fonts();
++    update_external_font_keys();
++
++    NtReleaseMutant( mutex, NULL );
++
+     reorder_font_list();
+     load_gdi_font_subst();
+     load_gdi_font_replacements();
+diff --git a/dlls/win32u/freetype.c b/dlls/win32u/freetype.c
+index 832043abaa3..363508de6f9 100644
+--- a/dlls/win32u/freetype.c
++++ b/dlls/win32u/freetype.c
+@@ -69,6 +69,7 @@
+ #include "ntgdi_private.h"
+ #include "wine/debug.h"
+ #include "wine/list.h"
++#include "wine/rbtree.h"
+ 
+ #ifdef SONAME_LIBFREETYPE
+ 
+@@ -160,6 +161,45 @@ MAKE_FUNCPTR(FcStrSetMember);
+ #endif
+ #endif /* SONAME_LIBFONTCONFIG */
+ 
++/* Font file deduplication: track loaded fonts by (device, inode) to avoid
++   parsing the same font file twice (e.g., from C:\windows\fonts\ and fontconfig) */
++
++struct loaded_font_file
++{
++    struct wine_rb_entry   entry;
++    dev_t                  dev;
++    ino_t                  ino;
++};
++
++static int loaded_font_compare( const void *key, const struct wine_rb_entry *entry )
++{
++    const struct loaded_font_file *a = key;
++    const struct loaded_font_file *b = WINE_RB_ENTRY_VALUE( entry, const struct loaded_font_file, entry );
++    if (a->dev < b->dev) return -1;
++    if (a->dev > b->dev) return 1;
++    if (a->ino < b->ino) return -1;
++    if (a->ino > b->ino) return 1;
++    return 0;
++}
++
++static struct wine_rb_tree loaded_fonts = { loaded_font_compare };
++
++static BOOL is_font_already_loaded( dev_t dev, ino_t ino )
++{
++    struct loaded_font_file key;
++    key.dev = dev;
++    key.ino = ino;
++    return wine_rb_get( &loaded_fonts, &key ) != NULL;
++}
++
++static void mark_font_loaded( dev_t dev, ino_t ino )
++{
++    struct loaded_font_file *loaded = malloc( sizeof(*loaded) );
++    loaded->dev = dev;
++    loaded->ino = ino;
++    wine_rb_put( &loaded_fonts, loaded, &loaded->entry );
++}
++
+ #undef MAKE_FUNCPTR
+ 
+ #ifndef FT_MAKE_TAG
+@@ -1060,6 +1100,16 @@ static INT AddFontToList(const WCHAR *dos_name, const char *unix_name, void *fon
+     /* we always load external fonts from files - otherwise we would get a crash in update_reg_entries */
+     assert(unix_name || !(flags & ADDFONT_EXTERNAL_FONT));
+ 
++    if (unix_name)
++    {
++        struct stat st;
++        if (!stat( unix_name, &st ))
++        {
++            if (is_font_already_loaded( st.st_dev, st.st_ino )) return 0;
++            mark_font_loaded( st.st_dev, st.st_ino );
++        }
++    }
++
+     if (!dos_name && unix_name && !ntdll_get_dos_file_name( unix_name, &filename, FILE_OPEN ))
+         dos_name = filename;
+ 
+@@ -1201,6 +1251,13 @@ static void fontconfig_add_font( FcPattern *pattern, UINT flags )
+     if (pFcPatternGetString( pattern, FC_FILE, 0, (FcChar8 **)&unix_name ) != FcResultMatch)
+         return;
+ 
++    /* skip fonts already loaded by the filesystem scan */
++    {
++        struct stat st;
++        if (!stat( unix_name, &st ) && is_font_already_loaded( st.st_dev, st.st_ino )) return;
++        mark_font_loaded( st.st_dev, st.st_ino );
++    }
++
+     if (pFcPatternGetBool( pattern, FC_SCALABLE, 0, &scalable ) != FcResultMatch)
+         scalable = FALSE;
+ 
+@@ -1348,7 +1405,7 @@ static void load_fontconfig_fonts( void )
+     if (!(done_set = pFcStrSetCreate())) goto done;
+     if (!(dir_list = pFcConfigGetFontDirs( config ))) goto done;
+ 
+-    fontconfig_add_fonts_from_dir_list( config, dir_list, done_set, ADDFONT_EXTERNAL_FONT );
++    fontconfig_add_fonts_from_dir_list( config, dir_list, done_set, ADDFONT_EXTERNAL_FONT | ADDFONT_ADD_TO_CACHE );
+ 
+ done:
+     if (dir_list) pFcStrListDone( dir_list );
