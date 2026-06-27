@@ -3,7 +3,7 @@
 ## Builds all libraries from source with pinned versions.
 ## Requires root: debootstrap, perl, bubblewrap
 
-set -e
+set -eux
 
 if [ "$EUID" != 0 ]; then
     echo "This script requires root rights!"
