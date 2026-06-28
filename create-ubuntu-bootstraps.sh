@@ -71,8 +71,8 @@ SOURCESEOF
 
 apt-get update
 apt-get -y install software-properties-common ca-certificates
-add-apt-repository -y ppa:ubuntu-toolchain-r/test
-add-apt-repository -y ppa:cybermax-dexter/mingw-w64-backport
+add-apt-repository -k hkp://keyserver.ubuntu.com:80 -y ppa:ubuntu-toolchain-r/test
+add-apt-repository -k hkp://keyserver.ubuntu.com:80 -y ppa:cybermax-dexter/mingw-w64-backport
 apt-get update
 apt-get -y upgrade
 apt-get -y dist-upgrade
