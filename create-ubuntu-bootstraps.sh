@@ -78,11 +78,17 @@ curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FB
 curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/cybermax-dexter_ubuntu_mingw-w64-backport.gpg"
 
-echo "deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main" \
-  | sudo tee /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test.list
+sudo tee -a /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test.list <<EOF
+deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main
 
-echo "deb https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main" \
-  | sudo tee /etc/apt/sources.list.d/cybermax-dexter-ubuntu-mingw-w64-backport.list
+deb-src https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main
+EOF
+
+sudo tee -a /etc/apt/sources.list.d/cybermax-dexter-ubuntu-mingw-w64-backport.list <<EOF
+deb https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main
+
+deb-src https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main
+EOF
 
 apt-get update
 apt-get -y upgrade
