@@ -55,6 +55,10 @@ export LANG=en_US.UTF-8
 export TERM=xterm
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 
+rm -f /root/.wget-hsts
+touch /root/.wget-hsts
+chmod 600 /root/.wget-hsts
+
 apt-get update
 apt-get -y install locales
 sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -73,17 +77,17 @@ apt-get update
 apt-get -y install curl wget software-properties-common ca-certificates
 
 curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
-  | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r_ubuntu_test.gpg"
+  | gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r_ubuntu_test.gpg"
 
 curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
-  | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/cybermax-dexter_ubuntu_mingw-w64-backport.gpg"
+  | gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/cybermax-dexter_ubuntu_mingw-w64-backport.gpg"
 
-sudo tee -a /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test.list <<EOF
+tee -a /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test.list <<EOF
 deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu ${CHROOT_DISTRO} main
 deb-src https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu ${CHROOT_DISTRO} main
 EOF
 
-sudo tee -a /etc/apt/sources.list.d/cybermax-dexter-ubuntu-mingw-w64-backport.list <<EOF
+tee -a /etc/apt/sources.list.d/cybermax-dexter-ubuntu-mingw-w64-backport.list <<EOF
 deb https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu ${CHROOT_DISTRO} main
 deb-src https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu ${CHROOT_DISTRO} main
 EOF
