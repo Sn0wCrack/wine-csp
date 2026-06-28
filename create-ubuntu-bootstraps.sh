@@ -47,7 +47,7 @@ create_build_script () {
     libgcrypt_version="1.12.2"
 
     cat > "${chroot_path}"/opt/prepare.sh << SCRIPTEOF
-#!/bin/bash
+#!/usr/bin/env bash
 set -eux
 
 export DEBIAN_FRONTEND=noninteractive
@@ -71,7 +71,7 @@ SOURCESEOF
 
 apt-get update
 apt-get -y install software-properties-common ca-certificates
-add-apt-repository -y ppa:ubuntu-toolchain-r/ppa
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
 add-apt-repository -y ppa:cybermax-dexter/mingw-w64-backport
 apt-get update
 apt-get -y upgrade
