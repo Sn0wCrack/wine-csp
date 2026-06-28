@@ -72,20 +72,20 @@ SOURCESEOF
 apt-get update
 apt-get -y install curl wget software-properties-common ca-certificates
 
-curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
+curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r_ubuntu_test.gpg"
 
-curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
+curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/cybermax-dexter_ubuntu_mingw-w64-backport.gpg"
 
 sudo tee -a /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test.list <<EOF
-deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main
-deb-src https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main
+deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu ${CHROOT_DISTRO} main
+deb-src https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu ${CHROOT_DISTRO} main
 EOF
 
 sudo tee -a /etc/apt/sources.list.d/cybermax-dexter-ubuntu-mingw-w64-backport.list <<EOF
-deb https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main
-deb-src https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main
+deb https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu ${CHROOT_DISTRO} main
+deb-src https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu ${CHROOT_DISTRO} main
 EOF
 
 apt-get update
