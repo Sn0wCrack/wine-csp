@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
 export WINE_VERSION="${WINE_VERSION:-}"
 if [ -z "${WINE_VERSION}" ]; then
