@@ -275,7 +275,7 @@ make -j\$(nproc) install
 cd ../
 
 cd libgcrypt-${libgcrypt_version}
-./configure ${libgrypt_options}
+./configure ${libgcrypt_options}
 make -j\$(nproc) install
 cd ../
 
