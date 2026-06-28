@@ -63,8 +63,9 @@ touch /root/.wget-hsts
 chmod 600 /root/.wget-hsts
 
 apt-get update
-apt-get -y install locales
-sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+apt-get -y install locales nano
+echo ru_RU.UTF_8 UTF-8 >> /etc/locale.gen
+echo en_US.UTF_8 UTF-8 >> /etc/locale.gen
 locale-gen
 
 cat > /etc/apt/sources.list << SOURCESEOF
