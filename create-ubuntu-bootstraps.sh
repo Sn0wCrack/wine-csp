@@ -23,6 +23,7 @@ export CHROOT_MIRROR="http://archive.ubuntu.com/ubuntu/"
 export MAINDIR=/opt/chroots
 export CHROOT_X64="${MAINDIR}"/${CHROOT_DISTRO}64_chroot
 export CHROOT_X32="${MAINDIR}"/${CHROOT_DISTRO}32_chroot
+export JOB_COUNT=$(($(getconf _NPROCESSORS_ONLN) + 2))
 
 create_build_script () {
     local chroot_path="$1"
@@ -183,37 +184,37 @@ export CFLAGS="-O2"
 export CXXFLAGS="-O2"
 
 cd cmake-${cmake_version}
-./bootstrap --parallel=\$(nproc)
-make -j\$(nproc) install
+./bootstrap --parallel=${JOB_COUNT}
+make -j${JOB_COUNT} install
 cd ../
 
 mkdir build && cd build
-cmake ../ccache-${ccache_version} && make -j\$(nproc) && make install
+cmake ../ccache-${ccache_version} && make -j${JOB_COUNT} && make install
 cd ../ && rm -r build && mkdir build && cd build
-cmake ../SDL2-${sdl2_version} && make -j\$(nproc) && make install
+cmake ../SDL2-${sdl2_version} && make -j${JOB_COUNT} && make install
 cd ../ && rm -r build && mkdir build && cd build
-cmake ../FAudio-${faudio_version} && make -j\$(nproc) && make install
+cmake ../FAudio-${faudio_version} && make -j${JOB_COUNT} && make install
 cd ../ && rm -r build && mkdir build && cd build
-cmake ../Vulkan-Headers-${vulkan_headers_version} && make -j\$(nproc) && make install
+cmake ../Vulkan-Headers-${vulkan_headers_version} && make -j${JOB_COUNT} && make install
 cd ../ && rm -r build && mkdir build && cd build
 cmake ../Vulkan-Loader-${vulkan_loader_version}
-make -j\$(nproc)
+make -j\${JOB_COUNT}
 make install
 cd ../ && rm -r build && mkdir build && cd build
-cmake ../SPIRV-Headers-${spirv_headers_version} && make -j\$(nproc) && make install
+cmake ../SPIRV-Headers-${spirv_headers_version} && make -j${JOB_COUNT} && make install
 cd ../
 
 dpkg -x wine.deb .
 cp opt/wine-stable/bin/widl /usr/bin
 
 rm -r build && mkdir build && cd build
-../libpcap-${libpcap_version}/configure && make -j\$(nproc) install
+../libpcap-${libpcap_version}/configure && make -j${JOB_COUNT} install
 cd ../
 
 rm -r build && mkdir build && cd build
 ../Python-${python3_version}/configure --enable-optimizations
-make -j\$(nproc)
-make -j\$(nproc) install
+make -j${JOB_COUNT}
+make -j${JOB_COUNT} install
 cd ../
 
 pip3 install setuptools
@@ -226,7 +227,7 @@ cd ../
 
 cd bison-${bison_version}
 ./configure
-make -j\$(nproc) install
+make -j${JOB_COUNT} install
 cd ../
 
 cd wayland-${wayland_version}
@@ -255,7 +256,7 @@ cd ../
 
 cd nettle-${nettle_version}
 ./configure
-make -j\$(nproc) install
+make -j${JOB_COUNT} install
 cd ../
 
 cd p11-kit-${p11_kit_version}
@@ -266,17 +267,17 @@ cd ../
 
 cd gnutls-${gnutls_version}
 ./configure --with-included-unistring --disable-doc
-make -j\$(nproc) install
+make -j${JOB_COUNT} install
 cd ../
 
 cd libgpg-error-${libgpg_error_version}
 ./configure
-make -j\$(nproc) install
+make -j${JOB_COUNT} install
 cd ../
 
 cd libgcrypt-${libgcrypt_version}
 ./configure ${libgcrypt_options}
-make -j\$(nproc) install
+make -j${JOB_COUNT} install
 cd ../
 
 cd /opt && rm -rf /opt/build_libs

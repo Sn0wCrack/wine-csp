@@ -7,6 +7,7 @@ if [ -z "${WINE_VERSION}" ]; then
     exit 1
 fi
 
+JOB_COUNT=$(($(getconf _NPROCESSORS_ONLN) + 2))
 REPO_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PATCH_DIR="${REPO_ROOT}/patches/${WINE_VERSION}"
 BUILD_DIR="${HOME}/build_wine"
@@ -102,7 +103,7 @@ export CXXFLAGS="${CFLAGS_X64}"
 mkdir "${BUILD_DIR}"/build64
 cd "${BUILD_DIR}"/build64 || exit
 ${BWRAP64} "${BUILD_DIR}"/wine/configure --enable-win64 ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-amd64
-${BWRAP64} make -j"$(nproc)" install
+${BWRAP64} make -j"${JOB_COUNT}" install
 
 echo "=== Building 32-bit tools ==="
 export CROSSCC="${CROSSCC_X32}"
@@ -114,7 +115,7 @@ mkdir "${BUILD_DIR}"/build32-tools
 cd "${BUILD_DIR}"/build32-tools || exit
 PKG_CONFIG_LIBDIR="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig" \
     ${BWRAP32} "${BUILD_DIR}"/wine/configure ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-x86
-${BWRAP32} make -j"$(nproc)" install
+${BWRAP32} make -j"${JOB_COUNT}" install
 
 echo "=== Building 32-bit Wine (targeting 64-bit) ==="
 export CFLAGS="${CFLAGS_X64}"
@@ -125,7 +126,7 @@ cd "${BUILD_DIR}"/build32 || exit
 PKG_CONFIG_LIBDIR="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig" \
     ${BWRAP32} "${BUILD_DIR}"/wine/configure --with-wine64="${BUILD_DIR}"/build64 --with-wine-tools="${BUILD_DIR}"/build32-tools \
     ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-amd64
-${BWRAP32} make -j"$(nproc)" install
+${BWRAP32} make -j"${JOB_COUNT}" install
 
 echo "=== Packaging ==="
 cd "${BUILD_DIR}" || exit
