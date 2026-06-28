@@ -49,6 +49,12 @@ create_build_script () {
     libgpg_error_version="1.59"
     libgcrypt_version="1.12.2"
 
+    libgcrypt_options=""
+
+    if [ "$arch" = "i386" ]; then
+        libgcrypt_options="--host=i686-linux-gnu"
+    fi
+
     cat > "${chroot_path}"/opt/prepare.sh << SCRIPTEOF
 #!/usr/bin/env bash
 set -eux
@@ -269,7 +275,7 @@ make -j\$(nproc) install
 cd ../
 
 cd libgcrypt-${libgcrypt_version}
-./configure
+./configure ${libgrypt_options}
 make -j\$(nproc) install
 cd ../
 
