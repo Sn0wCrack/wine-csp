@@ -70,12 +70,12 @@ deb-src ${CHROOT_MIRROR} ${CHROOT_DISTRO}-security main universe
 SOURCESEOF
 
 apt-get update
-apt-get -y install software-properties-common ca-certificates
+apt-get -y install curl wget software-properties-common ca-certificates
 
-wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
+curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r_ubuntu_test.gpg"
 
-wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
+curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/cybermax-dexter_ubuntu_mingw-w64-backport.gpg"
 
 echo "deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main" \
@@ -88,11 +88,11 @@ apt-get update
 apt-get -y upgrade
 apt-get -y dist-upgrade
 apt-get -y build-dep wine-development libsdl2 libvulkan1 python3
-apt-get -y install ccache gcc-12 g++-12 gcc-15 g++-15 wget git gcc-mingw-w64 g++-mingw-w64 ninja-build
+apt-get -y install ccache gcc-12 g++-12 gcc-15 g++-15 git gcc-mingw-w64 g++-mingw-w64 ninja-build
 apt-get -y install libxpresent-dev libjxr-dev libusb-1.0-0-dev libgcrypt20-dev libpulse-dev libudev-dev libsane-dev libv4l-dev libkrb5-dev libgphoto2-dev liblcms2-dev libcapi20-dev
 apt-get -y install libjpeg62-dev samba-dev libffi-dev
 apt-get -y install libpcsclite-dev libcups2-dev
-apt-get -y install python3-pip libxcb-xkb-dev libbz2-dev texinfo curl
+apt-get -y install python3-pip libxcb-xkb-dev libbz2-dev texinfo
 apt-get -y install graphviz xmlto --no-install-recommends
 apt-get -y purge libvulkan-dev libvulkan1 libsdl2-dev libsdl2-2.0-0 libpcap0.8-dev libpcap0.8 --purge --autoremove
 apt-get -y purge *gstreamer* --purge --autoremove
