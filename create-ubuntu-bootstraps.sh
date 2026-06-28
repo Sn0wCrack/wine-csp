@@ -80,13 +80,11 @@ curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD34
 
 sudo tee -a /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test.list <<EOF
 deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main
-
 deb-src https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main
 EOF
 
 sudo tee -a /etc/apt/sources.list.d/cybermax-dexter-ubuntu-mingw-w64-backport.list <<EOF
 deb https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main
-
 deb-src https://ppa.launchpadcontent.net/cybermax-dexter/mingw-w64-backport/ubuntu $(lsb_release -sc) main
 EOF
 
