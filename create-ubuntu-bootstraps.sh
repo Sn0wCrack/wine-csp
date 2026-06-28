@@ -72,10 +72,10 @@ SOURCESEOF
 apt-get update
 apt-get -y install software-properties-common ca-certificates
 
-curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
+wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC8EC952E2A0E1FBDC5090F6A2C277A0A352154E5" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r_ubuntu_test.gpg"
 
-curl -S "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
+curl -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xBBB8BD3BBE6AD3419048EDC50795A9A788A59C82" \
   | sudo gpg --batch --yes --dearmor --output "/etc/apt/trusted.gpg.d/cybermax-dexter_ubuntu_mingw-w64-backport.gpg"
 
 echo "deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -sc) main" \
