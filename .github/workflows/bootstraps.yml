@@ -7,12 +7,18 @@ on:
 
 jobs:
   build:
+    name: Bootstrap ${{ matrix.arch }}
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        arch: [amd64, i386]
 
     steps:
       - uses: actions/checkout@v7
 
       - name: Create bootstraps
+        env:
+          BOOTSTRAP_ARCH: ${{ matrix.arch }}
         run: |
           set -e
           sudo apt update
@@ -23,6 +29,6 @@ jobs:
           sha256sum bootstraps.tar.xz
       - uses: actions/upload-artifact@v7
         with:
-          name: Bootstraps
+          name: bootstrap-${{ matrix.arch }}
           path: /opt/bootstraps.tar.xz
           retention-days: 90

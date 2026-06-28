@@ -19,12 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download bootstraps
+      - name: Download bootstraps (64-bit)
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: bootstraps.yml
           workflow_conclusion: success
-          path: /opt
+          name: bootstrap-amd64
+          path: /tmp/bootstraps/amd64
+
+      - name: Download bootstraps (32-bit)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: bootstraps.yml
+          workflow_conclusion: success
+          name: bootstrap-i386
+          path: /tmp/bootstraps/i386
 
       - name: Install bubblewrap
         run: |
@@ -34,7 +43,7 @@ jobs:
       - name: Extract bootstraps
         run: |
           sudo mkdir -p /opt/chroots
-          sudo tar -I "xz" -xpf /tmp/bootstraps.tar.xz -C /opt
+          find /tmp/bootstraps -name 'bootstraps.tar.xz' -exec sudo tar -I "xz" -xpf {} -C /opt \;
 
       - name: Build Wine CSP ${{ matrix.version }}
         run: |

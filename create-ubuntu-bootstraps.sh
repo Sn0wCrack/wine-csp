@@ -2,6 +2,9 @@
 ## Creates Ubuntu Bionic chroots for Wine compilation using bubblewrap.
 ## Builds all libraries from source with pinned versions.
 ## Requires root: debootstrap, perl, bubblewrap
+##
+## Set BOOTSTRAP_ARCH to "amd64" (default) or "i386" to build a single arch,
+## or omit it to build both (original behavior).
 
 set -eux
 
@@ -310,15 +313,35 @@ prepare_chroot() {
 
 mkdir -p "${MAINDIR}"
 
-echo "=== Creating 64-bit chroot ==="
-debootstrap --arch amd64 "${CHROOT_DISTRO}" "${CHROOT_X64}" "${CHROOT_MIRROR}"
-create_build_script "${CHROOT_X64}" 64
-prepare_chroot "${CHROOT_X64}"
+BOOTSTRAP_ARCH="${BOOTSTRAP_ARCH:-both}"
 
-echo "=== Creating 32-bit chroot ==="
-debootstrap --arch i386 "${CHROOT_DISTRO}" "${CHROOT_X32}" "${CHROOT_MIRROR}"
-create_build_script "${CHROOT_X32}" 32
-prepare_chroot "${CHROOT_X32}"
+build_chroot() {
+    local arch="$1"
+    local arch_label="$2"
+    local chroot_path="$3"
+
+    echo "=== Creating ${arch_label} chroot ==="
+    debootstrap --arch "${arch}" "${CHROOT_DISTRO}" "${chroot_path}" "${CHROOT_MIRROR}"
+    create_build_script "${chroot_path}" "${arch_label}"
+    prepare_chroot "${chroot_path}"
+}
+
+case "${BOOTSTRAP_ARCH}" in
+    amd64)
+        build_chroot amd64 64 "${CHROOT_X64}"
+        ;;
+    i386)
+        build_chroot i386 32 "${CHROOT_X32}"
+        ;;
+    both)
+        build_chroot amd64 64 "${CHROOT_X64}"
+        build_chroot i386 32 "${CHROOT_X32}"
+        ;;
+    *)
+        echo "Unknown BOOTSTRAP_ARCH: ${BOOTSTRAP_ARCH}. Use amd64, i386, or both (default)."
+        exit 1
+        ;;
+esac
 
 echo "=== Done ==="
 echo "Chroots: ${CHROOT_X64} ${CHROOT_X32}"
