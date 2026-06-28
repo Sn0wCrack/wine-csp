@@ -109,7 +109,6 @@ apt-get -y autoclean
 
 export PATH="/usr/local/bin:\${PATH}"
 
-mkdir /opt/build_libs
 cd /opt/build_libs
 
 wget -O sdl.tar.gz https://www.libsdl.org/release/SDL2-${sdl2_version}.tar.gz
@@ -141,7 +140,6 @@ if [ -d /usr/lib/x86_64-linux-gnu ]; then
 fi
 
 git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git -b 1.22
-wget https://raw.githubusercontent.com/Kron4ek/Wine-Builds/refs/heads/master/mingw-w64-build
 
 tar xf sdl.tar.gz
 tar xf faudio.tar.gz
@@ -293,6 +291,8 @@ prepare_chroot() {
 
     rm -f "${chroot_path}"/etc/resolv.conf
     cp /etc/resolv.conf "${chroot_path}"/etc/resolv.conf
+    mkdir -p "${chroot_path}"/opt/build_libs
+    cp mingw-w64-build "${chroot_path}"/opt/build_libs/mingw-w64-build
 
     chroot "${chroot_path}" /usr/bin/env LANG=en_US.UTF-8 TERM=xterm \
         PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin" \
