@@ -23,7 +23,7 @@ jobs:
           set -e
           sudo apt update
           sudo apt install -y debootstrap perl bubblewrap
-          sudo ./create-ubuntu-bootstraps.sh
+          sudo --preserve-env=BOOTSTRAP_ARCH ./create-ubuntu-bootstraps.sh
           cd /opt
           sudo tar -I "xz -T0 -9" -cpf bootstraps.tar.xz chroots
           sha256sum bootstraps.tar.xz
