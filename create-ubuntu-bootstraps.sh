@@ -275,10 +275,13 @@ cd libgpg-error-${libgpg_error_version}
 make -j${JOB_COUNT} install
 cd ../
 
-cd libgcrypt-${libgcrypt_version}
-./configure ${libgcrypt_options}
-make -j${JOB_COUNT} install
-cd ../
+# libgcrypt fails to build on i386 regardless of settings. this happens upstream as well
+if [ ${arch} != "i386" ]; then
+    cd libgcrypt-${libgcrypt_version}
+    ./configure ${libgcrypt_options}
+    make -j${JOB_COUNT} install
+    cd ../
+fi
 
 cd /opt && rm -rf /opt/build_libs
 SCRIPTEOF
