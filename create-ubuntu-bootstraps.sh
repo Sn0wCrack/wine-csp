@@ -27,7 +27,7 @@ export JOB_COUNT=$(($(getconf _NPROCESSORS_ONLN) + 2))
 
 create_build_script () {
     local chroot_path="$1"
-    local arch="$2"
+    local arch_label="$2"
 
     sdl2_version="2.32.10"
     faudio_version="23.03"
@@ -52,7 +52,7 @@ create_build_script () {
 
     libgcrypt_options=""
 
-    if [ "$arch" = "i386" ]; then
+    if [ "$arch_label" = "32" ]; then
         libgcrypt_options="--host=i686-linux-gnu"
     fi
 
