@@ -73,11 +73,15 @@ build_with_bwrap () {
     if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
         shift
     fi
+
+
     bwrap --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
-        --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
-        --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
-        --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin" \
-        "$@"
+		  --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
+		  --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
+		  --bind-try "${XDG_CACHE_HOME}"/ccache "${XDG_CACHE_HOME}"/ccache \
+		  --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
+          --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin" \
+		  "$@"
 }
 
 BWRAP64="build_with_bwrap 64"
@@ -90,8 +94,8 @@ export CROSSCXX_X64="x86_64-w64-mingw32-g++"
 export CROSSCC_X32="i686-w64-mingw32-gcc"
 export CROSSCXX_X32="i686-w64-mingw32-g++"
 
-export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2"
-export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2"
+export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O3"
+export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O3"
 export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
 
 echo "=== Building Wine 64-bit ==="
@@ -113,7 +117,7 @@ export CXXFLAGS="${CFLAGS_X32}"
 
 mkdir "${BUILD_DIR}"/build32-tools
 cd "${BUILD_DIR}"/build32-tools || exit
-PKG_CONFIG_LIBDIR="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig" \
+PKG_CONFIG_LIBDIR="/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig:/usr/local/share/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig" \
     ${BWRAP32} "${BUILD_DIR}"/wine/configure ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-x86
 ${BWRAP32} make -j"${JOB_COUNT}" install
 
@@ -123,7 +127,7 @@ export CXXFLAGS="${CFLAGS_X64}"
 
 mkdir "${BUILD_DIR}"/build32
 cd "${BUILD_DIR}"/build32 || exit
-PKG_CONFIG_LIBDIR="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig" \
+PKG_CONFIG_LIBDIR="/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig:/usr/local/share/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig" \
     ${BWRAP32} "${BUILD_DIR}"/wine/configure --with-wine64="${BUILD_DIR}"/build64 --with-wine-tools="${BUILD_DIR}"/build32-tools \
     ${WINE_BUILD_OPTIONS} --prefix "${BUILD_DIR}"/wine-"${BUILD_NAME}"-amd64
 ${BWRAP32} make -j"${JOB_COUNT}" install
