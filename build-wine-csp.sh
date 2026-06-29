@@ -7,6 +7,13 @@ if [ -z "${WINE_VERSION}" ]; then
     exit 1
 fi
 
+if [ -z "${XDG_CACHE_HOME}" ]; then
+	export XDG_CACHE_HOME="${HOME}"/.cache
+fi
+
+mkdir -p "${XDG_CACHE_HOME}"/ccache
+mkdir -p "${HOME}"/.ccache
+
 JOB_COUNT=$(($(getconf _NPROCESSORS_ONLN) + 2))
 REPO_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PATCH_DIR="${REPO_ROOT}/patches/${WINE_VERSION}"
