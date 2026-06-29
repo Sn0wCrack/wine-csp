@@ -318,14 +318,6 @@
      DWORD id;
  
      IMFMediaType *type;
-@@ -77,6 +79,7 @@
-     IMFClockStateSink IMFClockStateSink_iface;
-     IMFAsyncCallback async_callback;
-     LONG refcount;
-+    IMFPresentationClock *clock;
-     CRITICAL_SECTION cs;
- 
-     enum
 @@ -627,6 +630,9 @@
  
      TRACE("media_sink %p, sample %p, stream_id %u.\n", media_sink, sample, stream_id);
