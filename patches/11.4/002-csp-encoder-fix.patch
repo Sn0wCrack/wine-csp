@@ -1,8 +1,6 @@
-diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
-index 01d9d2d..6e8814e 100644
---- a/dlls/mfplat/main.c
-+++ b/dlls/mfplat/main.c
-@@ -4175,9 +4175,22 @@ static HRESULT WINAPI bytestream_file_Flush(IMFByteStream *iface)
+--- a/dlls/mfplat/main.c	2026-03-07 07:41:46.000000000 +1100
++++ b/dlls/mfplat/main.c	2026-06-29 18:57:59.819811099 +1000
+@@ -4175,9 +4175,22 @@
  
  static HRESULT WINAPI bytestream_file_Close(IMFByteStream *iface)
  {
@@ -27,11 +25,9 @@ index 01d9d2d..6e8814e 100644
  }
  
  static HRESULT WINAPI bytestream_SetCurrentPosition(IMFByteStream *iface, QWORD position)
-diff --git a/dlls/mfreadwrite/writer.c b/dlls/mfreadwrite/writer.c
-index e57bf47..50f078c 100644
---- a/dlls/mfreadwrite/writer.c
-+++ b/dlls/mfreadwrite/writer.c
-@@ -35,6 +35,7 @@ enum writer_state
+--- a/dlls/mfreadwrite/writer.c	2026-03-07 07:41:46.000000000 +1100
++++ b/dlls/mfreadwrite/writer.c	2026-06-29 18:58:27.076842928 +1000
+@@ -35,6 +35,7 @@
  {
      SINK_WRITER_STATE_INITIAL = 0,
      SINK_WRITER_STATE_WRITING,
@@ -39,7 +35,7 @@ index e57bf47..50f078c 100644
  };
  
  struct marker_context
-@@ -337,6 +338,72 @@ static HRESULT WINAPI sink_writer_AddStream(IMFSinkWriterEx *iface, IMFMediaType
+@@ -465,6 +466,72 @@
      return hr;
  }
  
@@ -112,33 +108,7 @@ index e57bf47..50f078c 100644
  static HRESULT WINAPI sink_writer_SetInputMediaType(IMFSinkWriterEx *iface, DWORD index, IMFMediaType *type,
          IMFAttributes *parameters)
  {
-@@ -372,9 +457,22 @@ static HRESULT WINAPI sink_writer_SetInputMediaType(IMFSinkWriterEx *iface, DWOR
-     /* Types are not compatible, create transforms. */
-     if (!(flags & MF_MEDIATYPE_EQUAL_FORMAT_DATA))
-     {
--        /* TODO: Try only using converter first, then try again with encoder. */
--        FIXME("Not implemented.\n");
--        hr = E_NOTIMPL;
-+        GUID input_subtype, output_subtype;
-+        
-+        IMFMediaType_GetGUID(type, &MF_MT_SUBTYPE, &input_subtype);
-+        IMFMediaType_GetGUID(stream_type, &MF_MT_SUBTYPE, &output_subtype);
-+        
-+        if (!IsEqualGUID(&input_subtype, &output_subtype))
-+        {
-+            IMFTransform *encoder = NULL;
-+            hr = create_encoder_transform(type, stream_type, &encoder);
-+            if (SUCCEEDED(hr) && encoder)
-+            {
-+                if (stream->encoder) IMFTransform_Release(stream->encoder);
-+                stream->encoder = encoder;
-+ 
-+            }
-+        }
-     }
- 
- done:
-@@ -395,7 +497,7 @@ static HRESULT sink_writer_set_presentation_clock(struct sink_writer *writer)
+@@ -524,7 +591,7 @@
          hr = MFCreateSystemTimeSource(&time_source);
  
      if (SUCCEEDED(hr = IMFPresentationClock_SetTimeSource(writer->clock, time_source)))
@@ -147,60 +117,13 @@ index e57bf47..50f078c 100644
  
      if (time_source)
          IMFPresentationTimeSource_Release(time_source);
-@@ -439,16 +546,10 @@ static HRESULT WINAPI sink_writer_BeginWriting(IMFSinkWriterEx *iface)
-             hr = IMFPresentationClock_Start(writer->clock, 0);
- 
-         writer->state = SINK_WRITER_STATE_WRITING;
--        TRACE("BeginWriting: state set to WRITING (%d)\n", writer->state);
--    }
--    else
--    {
--        WARN("BeginWriting: failed to enter WRITING state, hr=%#lx\n", hr);
-     }
- 
-     LeaveCriticalSection(&writer->cs);
- 
--    TRACE("BeginWriting returning hr=%#lx, state=%d\n", hr, writer->state);
-     return hr;
- }
- 
-@@ -454,25 +567,12 @@ static HRESULT sink_writer_get_buffer_length(IMFSample *sample, LONGLONG *timest
-     *timestamp = 0;
-     *length = 0;
- 
--    if (FAILED(hr = IMFSample_ConvertToContiguousBuffer(sample, &buffer)))
--    {
--        WARN("ConvertToContiguousBuffer failed: hr %#lx\n", hr);
--        return hr;
--    }
-+    if (FAILED(hr = IMFSample_ConvertToContiguousBuffer(sample, &buffer))) return hr;
-     hr = IMFMediaBuffer_GetCurrentLength(buffer, length);
-     IMFMediaBuffer_Release(buffer);
--    if (FAILED(hr))
--    {
--        WARN("GetCurrentLength failed: hr %#lx\n", hr);
--        return hr;
--    }
--    if (!*length)
--    {
--        WARN("Buffer length is 0!\n");
--        return E_INVALIDARG;
--    }
-+    if (FAILED(hr)) return hr;
-+    if (!*length) return E_INVALIDARG;
-     IMFSample_GetSampleTime(sample, timestamp);
--    TRACE("get_buffer_length: length %lu, timestamp %lld\n", *length, (long long)*timestamp);
- 
-     return hr;
- }
-@@ -586,14 +712,67 @@ static HRESULT sink_writer_process_sample(struct sink_writer *writer, struct str
+@@ -715,14 +782,67 @@
  static HRESULT sink_writer_encode_sample(struct sink_writer *writer, struct stream *stream, IMFSample *sample)
  {
      struct pending_item *item;
 +    IMFSample *output_sample = sample;
 +    HRESULT hr = S_OK;
- 
--    /* FIXME: call the encoder, queue its output */
++
 +    if (stream->encoder)
 +    {
 +        MFT_OUTPUT_DATA_BUFFER output;
@@ -223,7 +146,8 @@ index e57bf47..50f078c 100644
 +            IMFSample_Release(output_sample);
 +            return hr;
 +        }
-+
+ 
+-    /* FIXME: call the encoder, queue its output */
 +        IMFSample_AddBuffer(output_sample, buffer);
 +        IMFMediaBuffer_Release(buffer);
 +
@@ -264,51 +188,16 @@ index e57bf47..50f078c 100644
      list_add_tail(&stream->queue, &item->entry);
  
      return S_OK;
-@@ -617,13 +813,8 @@ static HRESULT sink_writer_write_sample(struct sink_writer *writer, struct strea
+@@ -746,7 +866,7 @@
  
      if (FAILED(hr = sink_writer_encode_sample(writer, stream, sample))) return hr;
  
--    /* Always try to process samples - some sinks don't use async sample requests */
--    if (stream->stats.dwNumOutstandingSinkSampleRequests || !list_empty(&stream->queue))
--    {
--        TRACE("Processing queued sample (outstanding=%lu, queue_empty=%d)\n", 
--              stream->stats.dwNumOutstandingSinkSampleRequests, list_empty(&stream->queue));
+-    if (stream->stats.dwNumOutstandingSinkSampleRequests)
 +    if (stream->stats.dwNumOutstandingSinkSampleRequests || !list_empty(&stream->queue))
          hr = sink_writer_process_sample(writer, stream);
--    }
  
      return hr;
- }
-@@ -638,27 +839,11 @@ static HRESULT WINAPI sink_writer_WriteSample(IMFSinkWriterEx *iface, DWORD inde
- 
-     EnterCriticalSection(&writer->cs);
- 
--    TRACE("WriteSample: state=%d, WRITING=%d, index=%lu\n", writer->state, SINK_WRITER_STATE_WRITING, index);
-     if (writer->state != SINK_WRITER_STATE_WRITING)
--    {
--        WARN("WriteSample: wrong state %d, expected %d\n", writer->state, SINK_WRITER_STATE_WRITING);
-         hr = MF_E_INVALIDREQUEST;
--    }
-     else if (!(stream = sink_writer_get_stream(writer, index)))
--    {
--        WARN("WriteSample: invalid stream index %lu\n", index);
-         hr = MF_E_INVALIDSTREAMNUMBER;
--    }
--    else
--    {
--        TRACE("WriteSample: calling get_buffer_length for sample %p\n", sample);
--        hr = sink_writer_get_buffer_length(sample, &timestamp, &length);
--        if (FAILED(hr))
--        {
--            WARN("WriteSample: get_buffer_length failed: %#lx\n", hr);
--        }
--    }
--    if (SUCCEEDED(hr))
-+    else if (SUCCEEDED(hr = sink_writer_get_buffer_length(sample, &timestamp, &length)))
-     {
-         stream->stats.llLastTimestampReceived = timestamp;
-         stream->stats.qwNumSamplesReceived++;
-@@ -769,9 +984,100 @@ static HRESULT WINAPI sink_writer_Flush(IMFSinkWriterEx *iface, DWORD index)
+@@ -898,9 +1018,100 @@
  
  static HRESULT WINAPI sink_writer_Finalize(IMFSinkWriterEx *iface)
  {
@@ -316,8 +205,7 @@ index e57bf47..50f078c 100644
 +    struct sink_writer *writer = impl_from_IMFSinkWriterEx(iface);
 +    HRESULT hr = S_OK;
 +    unsigned int i;
- 
--    return E_NOTIMPL;
++
 +    TRACE("%p.\n", iface);
 +
 +    EnterCriticalSection(&writer->cs);
@@ -329,7 +217,8 @@ index e57bf47..50f078c 100644
 +    else
 +    {
 +        writer->state = SINK_WRITER_STATE_FINALIZED;
-+
+ 
+-    return E_NOTIMPL;
 +        for (i = 0; i < writer->streams.count; i++)
 +        {
 +            struct stream *stream = &writer->streams.items[i];
@@ -411,11 +300,9 @@ index e57bf47..50f078c 100644
  }
  
  static HRESULT sink_writer_get_service(void *object, REFGUID service, REFIID riid, void **ret)
-diff --git a/dlls/winegstreamer/media_sink.c b/dlls/winegstreamer/media_sink.c
-index 21e4d6f..7fcb9af 100644
---- a/dlls/winegstreamer/media_sink.c
-+++ b/dlls/winegstreamer/media_sink.c
-@@ -39,6 +39,7 @@ struct async_command
+--- a/dlls/winegstreamer/media_sink.c	2026-03-07 07:41:46.000000000 +1100
++++ b/dlls/winegstreamer/media_sink.c	2026-06-29 18:58:39.602857262 +1000
+@@ -39,6 +39,7 @@
  {
      IUnknown IUnknown_iface;
      LONG refcount;
@@ -423,7 +310,7 @@ index 21e4d6f..7fcb9af 100644
  
      enum async_op op;
  
-@@ -61,6 +62,7 @@ struct stream_sink
+@@ -61,6 +62,7 @@
      IMFStreamSink IMFStreamSink_iface;
      IMFMediaTypeHandler IMFMediaTypeHandler_iface;
      LONG refcount;
@@ -431,7 +318,7 @@ index 21e4d6f..7fcb9af 100644
      DWORD id;
  
      IMFMediaType *type;
-@@ -77,6 +79,7 @@ struct media_sink
+@@ -77,6 +79,7 @@
      IMFClockStateSink IMFClockStateSink_iface;
      IMFAsyncCallback async_callback;
      LONG refcount;
@@ -439,7 +326,7 @@ index 21e4d6f..7fcb9af 100644
      CRITICAL_SECTION cs;
  
      enum
-@@ -626,6 +629,9 @@ static HRESULT media_sink_process(struct media_sink *media_sink, IMFSample *samp
+@@ -627,6 +630,9 @@
  
      TRACE("media_sink %p, sample %p, stream_id %u.\n", media_sink, sample, stream_id);
  
@@ -449,14 +336,13 @@ index 21e4d6f..7fcb9af 100644
      if (FAILED(hr = media_sink_write_stream(media_sink)))
          WARN("Failed to write output samples to stream, hr %#lx.\n", hr);
  
-@@ -661,8 +671,17 @@ static HRESULT media_sink_begin_finalize(struct media_sink *media_sink, IMFAsync
+@@ -662,8 +668,15 @@
  
      if (media_sink->state == STATE_SHUTDOWN)
          return MF_E_SHUTDOWN;
--    if (!callback)
--        return S_OK;
 +
-+    if (!callback)
+     if (!callback)
+-        return S_OK;
 +    {
 +        media_sink->state = STATE_FINALIZED;
 +        hr = wg_muxer_finalize(media_sink->muxer);
@@ -464,60 +350,12 @@ index 21e4d6f..7fcb9af 100644
 +            hr = media_sink_write_stream(media_sink);
 +        return hr;
 +    }
-+        return hr;
-+    }
  
      if (FAILED(hr = async_command_create(ASYNC_FINALIZE, &command)))
          return hr;
-@@ -891,9 +911,41 @@ static HRESULT WINAPI media_sink_GetStreamSinkById(IMFFinalizableMediaSink *ifac
- 
- static HRESULT WINAPI media_sink_SetPresentationClock(IMFFinalizableMediaSink *iface, IMFPresentationClock *clock)
- {
--    FIXME("iface %p, clock %p stub!\n", iface, clock);
-+    struct media_sink *media_sink = impl_from_IMFFinalizableMediaSink(iface);
-+    HRESULT hr = S_OK;
- 
--    return E_NOTIMPL;
-+    TRACE("iface %p, clock %p.\n", iface, clock);
-+
-+    EnterCriticalSection(&media_sink->cs);
-+
-+    if (media_sink->state == STATE_SHUTDOWN)
-+    {
-+        LeaveCriticalSection(&media_sink->cs);
-+        return MF_E_SHUTDOWN;
-+    }
-+
-+    if (media_sink->clock)
-+    {
-+        IMFPresentationClock_RemoveClockStateSink(media_sink->clock, &media_sink->IMFClockStateSink_iface);
-+        IMFPresentationClock_Release(media_sink->clock);
-+        media_sink->clock = NULL;
-+    }
-+
-+    if (clock)
-+    {
-+        IMFPresentationClock_AddRef(clock);
-+        media_sink->clock = clock;
-+        hr = IMFPresentationClock_AddClockStateSink(clock, &media_sink->IMFClockStateSink_iface);
-+        if (FAILED(hr))
-+        {
-+            IMFPresentationClock_Release(clock);
-+            media_sink->clock = NULL;
-+        }
-+    }
-+
-+    LeaveCriticalSection(&media_sink->cs);
-+
-+    return hr;
- }
- 
- static HRESULT WINAPI media_sink_GetPresentationClock(IMFFinalizableMediaSink *iface, IMFPresentationClock **clock)
-diff --git a/dlls/winegstreamer/video_encoder.c b/dlls/winegstreamer/video_encoder.c
-index 4129192..fc314e3 100644
---- a/dlls/winegstreamer/video_encoder.c
-+++ b/dlls/winegstreamer/video_encoder.c
-@@ -729,6 +729,7 @@ static HRESULT video_encoder_create(const GUID *const *input_types, UINT input_t
+--- a/dlls/winegstreamer/video_encoder.c	2026-03-07 07:41:46.000000000 +1100
++++ b/dlls/winegstreamer/video_encoder.c	2026-06-29 18:57:59.821039512 +1000
+@@ -729,6 +729,7 @@
      encoder->output_type_count = output_type_count;
  
      encoder->wg_transform_attrs.input_queue_length = 15;
@@ -525,7 +363,7 @@ index 4129192..fc314e3 100644
  
      if (FAILED(hr = MFCreateAttributes(&encoder->attributes, 16)))
          goto failed;
-@@ -751,6 +752,7 @@ failed:
+@@ -751,6 +752,7 @@
  
  static const GUID *const h264_encoder_input_types[] =
  {
@@ -533,11 +371,9 @@ index 4129192..fc314e3 100644
      &MFVideoFormat_IYUV,
      &MFVideoFormat_YV12,
      &MFVideoFormat_NV12,
-diff --git a/dlls/winegstreamer/wg_transform.c b/dlls/winegstreamer/wg_transform.c
-index f8bf447..02c5df0 100644
---- a/dlls/winegstreamer/wg_transform.c
-+++ b/dlls/winegstreamer/wg_transform.c
-@@ -108,8 +108,9 @@ static void align_video_info_planes(MFVideoInfo *video_info, gsize plane_align,
+--- a/dlls/winegstreamer/wg_transform.c	2026-03-07 07:41:46.000000000 +1100
++++ b/dlls/winegstreamer/wg_transform.c	2026-06-29 18:57:59.821144082 +1000
+@@ -107,6 +107,7 @@
          GstVideoInfo *info, GstVideoAlignment *align)
  {
      bool fix_nv12 = !plane_align && info->finfo->format == GST_VIDEO_FORMAT_NV12 && (info->width & 3) && (info->width & 3) != 3;
@@ -545,9 +381,7 @@ index f8bf447..02c5df0 100644
      const MFVideoArea *aperture = &video_info->MinimumDisplayAperture;
  
      gst_video_alignment_reset(align);
- 
-     align->padding_right = ((plane_align + 1) - (info->width & plane_align)) & plane_align;
-@@ -143,6 +147,21 @@ static void align_video_info_planes(MFVideoInfo *video_info, gsize plane_align,
+@@ -163,6 +164,21 @@
          info->size = info->offset[1] + info->stride[0] * aligned_height / 2;
          align->stride_align[0] = 1;
      }
