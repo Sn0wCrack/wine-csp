@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Download bootstrap (64-bit)
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: bootstraps.yml
           workflow_conclusion: success
@@ -28,7 +28,7 @@ jobs:
           path: /tmp/bootstraps/amd64
 
       - name: Download bootstrap (32-bit)
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: bootstraps.yml
           workflow_conclusion: success
