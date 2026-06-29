@@ -81,7 +81,7 @@ build_with_bwrap () {
     bwrap --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
 		  --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
 		  --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
-		  --bind-try "${${XDG_CACHE_HOME:-${HOME}/.cache}}"/ccache "${${XDG_CACHE_HOME:-${HOME}/.cache}}"/ccache \
+		  --bind-try "${XDG_CACHE_HOME:-${HOME}/.cache}"/ccache "${XDG_CACHE_HOME:-${HOME}/.cache}"/ccache \
 		  --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
           --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin" \
 		  "$@"
