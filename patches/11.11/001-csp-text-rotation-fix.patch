@@ -1,5 +1,5 @@
 diff --git a/dlls/dwrite/freetype.c b/dlls/dwrite/freetype.c
-index 13d9a079d06..5c2e481c8a9 100644
+index 13d9a079d06..4a1ad6df423 100644
 --- a/dlls/dwrite/freetype.c
 +++ b/dlls/dwrite/freetype.c
 @@ -32,6 +32,7 @@
@@ -26,18 +26,23 @@ index 13d9a079d06..5c2e481c8a9 100644
      LOAD_FUNCPTR(FT_Outline_Get_Bitmap)
      LOAD_FUNCPTR(FT_Outline_New)
      LOAD_FUNCPTR(FT_Outline_Transform)
-@@ -561,7 +564,24 @@ static NTSTATUS get_glyph_bbox(void *args)
+@@ -561,7 +564,29 @@ static NTSTATUS get_glyph_bbox(void *args)
          pFT_Glyph_Transform(glyph, &m, NULL);
      }
  
 -    pFT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &bbox);
-+    if (pFT_Outline_Get_BBox(&glyph->outline, &bbox))
++    if (glyph->format == FT_GLYPH_FORMAT_OUTLINE && !pFT_Outline_Get_BBox(&((FT_OutlineGlyph)glyph)->outline, &bbox))
++    {
++        /* outline bbox is in 26.6 fixed-point units */
++    }
++    else
++    {
 +        pFT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_SUBPIXELS, &bbox);
++    }
 +
 +    /* grid-fit to 64-unit (1 pixel) boundaries in 26.6 fixed-point.
 +     * xMin/yMin round toward negative infinity (expanding the box outward on
-+     * the left/bottom edges), xMax/yMax round up (expanding on
-+     * right/top edges). */
++     * left/bottom edges), xMax/yMax round up (expanding on right/top edges). */
 +    bbox.xMin = bbox.xMin & -64;
 +    bbox.xMax = (bbox.xMax + 63) & -64;
 +    bbox.yMin = bbox.yMin & -64;
@@ -53,7 +58,7 @@ index 13d9a079d06..5c2e481c8a9 100644
      pFT_Done_Size(size);
  
 diff --git a/dlls/win32u/freetype.c b/dlls/win32u/freetype.c
-index 832043abaa3..8da115081e3 100644
+index 832043abaa3..f8e04f2559c 100644
 --- a/dlls/win32u/freetype.c
 +++ b/dlls/win32u/freetype.c
 @@ -53,6 +53,7 @@
@@ -90,7 +95,7 @@ index 832043abaa3..8da115081e3 100644
      LOAD_FUNCPTR(FT_Outline_Transform)
      LOAD_FUNCPTR(FT_Outline_Translate)
      LOAD_FUNCPTR(FT_Property_Set)
-@@ -2446,17 +2455,45 @@ static FT_Vector get_advance_metric( struct gdi_font *font, FT_Pos base_advance,
+@@ -2446,7 +2455,8 @@ static FT_Vector get_advance_metric( struct gdi_font *font, FT_Pos base_advance,
      return adv;
  }
  
@@ -100,12 +105,7 @@ index 832043abaa3..8da115081e3 100644
  {
      FT_BBox bbox = { 0, 0, 0, 0 };
  
-     if (!matrices)
-     {
-+        /* grid-fit 26.6 fixed-point coords to 64-unit (1 pixel) boundaries:
-+         * xMin/yMin round toward negative infinity, xMax/yMax round up */
-         bbox.xMin = (metrics->horiBearingX) & -64;
-         bbox.xMax = (metrics->horiBearingX + metrics->width + 63) & -64;
+@@ -2457,6 +2467,27 @@ static FT_BBox get_transformed_bbox( const FT_Glyph_Metrics *metrics, const FT_M
          bbox.yMax = (metrics->horiBearingY + 63) & -64;
          bbox.yMin = (metrics->horiBearingY - metrics->height) & -64;
      }
@@ -124,10 +124,6 @@ index 832043abaa3..8da115081e3 100644
 +            pFT_Outline_Done( library, &outline_copy );
 +        }
 +
-+        /* grid-fit to 64-unit (1 pixel) boundaries in 26.6 fixed-point.
-+         * xMin/yMin round toward negative infinity (expanding the box outward
-+         * on left/bottom edges), xMax/yMax round up (expanding on
-+         * right/top edges). */
 +        bbox.xMin = bbox.xMin & -64;
 +        bbox.xMax = (bbox.xMax + 63) & -64;
 +        bbox.yMin = bbox.yMin & -64;
@@ -137,15 +133,7 @@ index 832043abaa3..8da115081e3 100644
      else
      {
          FT_Vector vec;
-@@ -2484,6 +2521,7 @@ static FT_BBox get_transformed_bbox( const FT_Glyph_Metrics *metrics, const FT_M
-                 }
-             }
-         }
-+        /* grid-fit to 64-unit (1 pixel) boundaries in 26.6 fixed-point */
-         bbox.xMin = bbox.xMin & -64;
-         bbox.xMax = (bbox.xMax + 63) & -64;
-         bbox.yMin = bbox.yMin & -64;
-@@ -3164,7 +3202,7 @@ static UINT freetype_get_glyph_outline( struct gdi_font *font, UINT glyph, UINT
+@@ -3164,7 +3195,7 @@ static UINT freetype_get_glyph_outline( struct gdi_font *font, UINT glyph, UINT
          /* metrics.width = min( metrics.width, ptm->tmMaxCharWidth << 6 ); */
      }
  
