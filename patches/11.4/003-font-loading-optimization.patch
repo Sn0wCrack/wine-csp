@@ -1,81 +1,19 @@
 diff --git a/dlls/win32u/font.c b/dlls/win32u/font.c
-index e34cb13d0e5..ea705ba1f6b 100644
+index e34cb13d0e5..fc65b3224a4 100644
 --- a/dlls/win32u/font.c
 +++ b/dlls/win32u/font.c
-@@ -1407,6 +1407,21 @@ static void add_face_to_cache( struct gdi_font_face *face )
-     NtClose( hkey_family );
- }
- 
-+static void cache_all_faces(void)
-+{
-+    struct gdi_font_family *family;
-+
-+    WINE_RB_FOR_EACH_ENTRY( family, &family_name_tree, struct gdi_font_family, name_entry )
-+    {
-+        struct gdi_font_face *face;
-+
-+        LIST_FOR_EACH_ENTRY( face, get_family_face_list( family ), struct gdi_font_face, entry )
-+        {
-+            add_face_to_cache( face );
-+        }
-+    }
-+}
-+
- static void remove_face_from_cache( struct gdi_font_face *face )
- {
-     HKEY hkey_family, hkey;
-@@ -6749,10 +6764,6 @@ UINT font_init(void)
-     if (!(font_funcs = init_freetype_lib()))
+@@ -6750,8 +6750,8 @@ UINT font_init(void)
          return dpi;
  
--    load_system_bitmap_fonts();
+     load_system_bitmap_fonts();
 -    load_file_system_fonts();
--    font_funcs->load_fonts();
--
+     font_funcs->load_fonts();
++    load_file_system_fonts();
+ 
      attr.Attributes = OBJ_OPENIF;
      attr.ObjectName = &name;
-     name.Buffer = wine_font_mutexW;
-@@ -6764,20 +6775,29 @@ UINT font_init(void)
-     wine_fonts_cache_key = reg_create_key( wine_fonts_key, cacheW, sizeof(cacheW),
-                                            REG_OPTION_VOLATILE, &disposition );
- 
--    if (disposition == REG_CREATED_NEW_KEY)
--    {
--        load_registry_fonts();
--        update_external_font_keys();
--    }
--
--    NtReleaseMutant( mutex, NULL );
--
-     if (disposition != REG_CREATED_NEW_KEY)
-     {
--        load_registry_fonts();
-+        load_system_bitmap_fonts();
-         load_font_list_from_cache();
-+        NtReleaseMutant( mutex, NULL );
-+        reorder_font_list();
-+        load_gdi_font_subst();
-+        load_gdi_font_replacements();
-+        load_system_links();
-+        dump_gdi_font_list();
-+        dump_gdi_font_subst();
-+        return dpi;
-     }
- 
-+    load_system_bitmap_fonts();
-+    load_file_system_fonts();
-+    font_funcs->load_fonts();
-+    load_registry_fonts();
-+    update_external_font_keys();
-+    cache_all_faces();
-+
-+    NtReleaseMutant( mutex, NULL );
-+
-     reorder_font_list();
-     load_gdi_font_subst();
-     load_gdi_font_replacements();
 diff --git a/dlls/win32u/freetype.c b/dlls/win32u/freetype.c
-index a660b166a0f..997598a0ff9 100644
+index a660b166a0f..1ce06370d77 100644
 --- a/dlls/win32u/freetype.c
 +++ b/dlls/win32u/freetype.c
 @@ -69,6 +69,7 @@
@@ -129,33 +67,138 @@ index a660b166a0f..997598a0ff9 100644
  #ifndef FT_MAKE_TAG
  #define FT_MAKE_TAG( ch0, ch1, ch2, ch3 ) \
  	( ((DWORD)(BYTE)(ch0) << 24) | ((DWORD)(BYTE)(ch1) << 16) | \
-@@ -1060,6 +1097,16 @@ static INT AddFontToList(const WCHAR *dos_name, const char *unix_name, void *fon
-     /* we always load external fonts from files - otherwise we would get a crash in update_reg_entries */
-     assert(unix_name || !(flags & ADDFONT_EXTERNAL_FONT));
+@@ -1188,21 +1225,58 @@ static FcPattern *create_family_pattern( const char *name, FcPattern **cached )
+     return ret;
+ }
  
-+    if (unix_name)
++static int fontconfig_add_font_metadata( const WCHAR *dos_name, const char *unix_name,
++                                          DWORD face_index, const WCHAR *family_name,
++                                          const WCHAR *style_name, const WCHAR *full_name,
++                                          LONG weight, BOOL italic, BOOL scalable, UINT flags )
++{
++    static const WCHAR emptyW[] = { 0 };
++    FONTSIGNATURE fs;
++    DWORD ntm_flags = 0;
++
++    fs.fsUsb[0] = ~0u;
++    fs.fsUsb[1] = ~0u;
++    fs.fsUsb[2] = ~0u;
++    fs.fsUsb[3] = ~0u;
++    fs.fsCsb[0] = ~0u;
++    fs.fsCsb[1] = ~0u;
++
++    if (italic) ntm_flags |= NTM_ITALIC;
++    if (weight >= FW_BOLD) ntm_flags |= NTM_BOLD;
++
++    if (!family_name) family_name = emptyW;
++    if (!style_name) style_name = emptyW;
++    if (!full_name) full_name = emptyW;
++
++    return add_gdi_face( family_name, style_name, style_name, full_name,
++                         dos_name, NULL, 0, face_index, fs, ntm_flags, weight,
++                         0, flags, scalable ? NULL : NULL );
++}
++
+ static void fontconfig_add_font( FcPattern *pattern, UINT flags )
+ {
+-    const char *unix_name, *format;
+-    WCHAR *dos_name;
++    const char *unix_name, *format, *fc_family, *fc_style, *fc_fullname;
++    WCHAR *dos_name, *family_name = NULL, *style_name = NULL, *full_name = NULL;
+     FcBool scalable;
+     DWORD aa_flags;
+-    int face_index;
++    int face_index, fc_weight, fc_slant, font_version;
++    LONG weight = FW_NORMAL;
++    BOOL italic = FALSE;
+ 
+     TRACE( "(%p %#x)\n", pattern, flags );
+ 
+     if (pFcPatternGetString( pattern, FC_FILE, 0, (FcChar8 **)&unix_name ) != FcResultMatch)
+         return;
+ 
+-    if (pFcPatternGetBool( pattern, FC_SCALABLE, 0, &scalable ) != FcResultMatch)
+-        scalable = FALSE;
++    /* skip fonts already loaded by the filesystem scan */
 +    {
 +        struct stat st;
 +        if (!stat( unix_name, &st ))
 +        {
-+            if (is_font_already_loaded( st.st_dev, st.st_ino )) return 0;
++            if (is_font_already_loaded( st.st_dev, st.st_ino )) return;
 +            mark_font_loaded( st.st_dev, st.st_ino );
 +        }
 +    }
-+
-     if (!dos_name && unix_name && !ntdll_get_dos_file_name( unix_name, &filename, FILE_OPEN ))
-         dos_name = filename;
  
-@@ -1201,6 +1248,12 @@ static void fontconfig_add_font( FcPattern *pattern, UINT flags )
-     if (pFcPatternGetString( pattern, FC_FILE, 0, (FcChar8 **)&unix_name ) != FcResultMatch)
+     if (pFcPatternGetString( pattern, FC_FONTFORMAT, 0, (FcChar8 **)&format ) != FcResultMatch)
+     {
+@@ -1216,6 +1290,9 @@ static void fontconfig_add_font( FcPattern *pattern, UINT flags )
          return;
+     }
  
++    if (pFcPatternGetBool( pattern, FC_SCALABLE, 0, &scalable ) != FcResultMatch)
++        scalable = FALSE;
++
+     if (!scalable && !(flags & ADDFONT_ALLOW_BITMAP))
+     {
+         TRACE( "ignoring non-scalable font %s\n", debugstr_a(unix_name) );
+@@ -1228,9 +1305,59 @@ static void fontconfig_add_font( FcPattern *pattern, UINT flags )
+     if (pFcPatternGetInteger( pattern, FC_INDEX, 0, &face_index ) != FcResultMatch)
+         face_index = 0;
+ 
++    /* Extract metadata from fontconfig pattern */
++    fc_family = NULL;
++    if (pFcPatternGetString( pattern, FC_FAMILY, 0, (FcChar8 **)&fc_family ) == FcResultMatch)
 +    {
-+        struct stat st;
-+        if (!stat( unix_name, &st ) && is_font_already_loaded( st.st_dev, st.st_ino )) return;
-+        mark_font_loaded( st.st_dev, st.st_ino );
++        int len = strlen( fc_family ) + 1, out_len = len * sizeof(WCHAR);
++        family_name = malloc( out_len );
++        if (family_name && RtlUTF8ToUnicodeN( family_name, out_len, NULL, fc_family, len ))
++        {
++            free( family_name );
++            family_name = NULL;
++        }
 +    }
 +
-     if (pFcPatternGetBool( pattern, FC_SCALABLE, 0, &scalable ) != FcResultMatch)
-         scalable = FALSE;
++    fc_style = NULL;
++    if (pFcPatternGetString( pattern, FC_STYLE, 0, (FcChar8 **)&fc_style ) == FcResultMatch)
++    {
++        int len = strlen( fc_style ) + 1, out_len = len * sizeof(WCHAR);
++        style_name = malloc( out_len );
++        if (style_name && RtlUTF8ToUnicodeN( style_name, out_len, NULL, fc_style, len ))
++        {
++            free( style_name );
++            style_name = NULL;
++        }
++    }
++
++    fc_fullname = NULL;
++    if (pFcPatternGetString( pattern, FC_FULLNAME, 0, (FcChar8 **)&fc_fullname ) == FcResultMatch)
++    {
++        int len = strlen( fc_fullname ) + 1, out_len = len * sizeof(WCHAR);
++        full_name = malloc( out_len );
++        if (full_name && RtlUTF8ToUnicodeN( full_name, out_len, NULL, fc_fullname, len ))
++        {
++            free( full_name );
++            full_name = NULL;
++        }
++    }
++
++    if (pFcPatternGetInteger( pattern, FC_WEIGHT, 0, &fc_weight ) == FcResultMatch)
++        weight = fc_weight;
++
++    if (pFcPatternGetInteger( pattern, FC_SLANT, 0, &fc_slant ) == FcResultMatch)
++        italic = (fc_slant != 0);
++
+     ntdll_get_dos_file_name( unix_name, &dos_name, FILE_OPEN );
+-    add_unix_face( unix_name, dos_name, NULL, 0, face_index, flags, NULL );
++    fontconfig_add_font_metadata( dos_name, unix_name, face_index,
++                                  family_name,
++                                  style_name,
++                                  full_name,
++                                  weight, italic, scalable, flags );
+     free( dos_name );
++    free( family_name );
++    free( style_name );
++    free( full_name );
+ }
  
+ static void init_fontconfig(void)
