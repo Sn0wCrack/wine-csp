@@ -1,0 +1,144 @@
+diff --git a/dlls/dwrite/freetype.c b/dlls/dwrite/freetype.c
+index 13d9a079d06..4a1ad6df423 100644
+--- a/dlls/dwrite/freetype.c
++++ b/dlls/dwrite/freetype.c
+@@ -32,6 +32,7 @@
+ #include FT_GLYPH_H
+ #include FT_FREETYPE_H
+ #include FT_OUTLINE_H
++#include FT_BBOX_H
+ #include FT_TRUETYPE_TABLES_H
+ #include FT_SIZES_H
+ #endif /* HAVE_FT2BUILD_H */
+@@ -80,6 +81,7 @@ MAKE_FUNCPTR(FT_Outline_Copy);
+ MAKE_FUNCPTR(FT_Outline_Decompose);
+ MAKE_FUNCPTR(FT_Outline_Done);
+ MAKE_FUNCPTR(FT_Outline_EmboldenXY);
++MAKE_FUNCPTR(FT_Outline_Get_BBox);
+ MAKE_FUNCPTR(FT_Outline_Get_Bitmap);
+ MAKE_FUNCPTR(FT_Outline_New);
+ MAKE_FUNCPTR(FT_Outline_Transform);
+@@ -146,6 +148,7 @@ static NTSTATUS process_attach(void *args)
+     LOAD_FUNCPTR(FT_Outline_Decompose)
+     LOAD_FUNCPTR(FT_Outline_Done)
+     LOAD_FUNCPTR(FT_Outline_EmboldenXY)
++    LOAD_FUNCPTR(FT_Outline_Get_BBox)
+     LOAD_FUNCPTR(FT_Outline_Get_Bitmap)
+     LOAD_FUNCPTR(FT_Outline_New)
+     LOAD_FUNCPTR(FT_Outline_Transform)
+@@ -561,7 +564,29 @@ static NTSTATUS get_glyph_bbox(void *args)
+         pFT_Glyph_Transform(glyph, &m, NULL);
+     }
+ 
+-    pFT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &bbox);
++    if (glyph->format == FT_GLYPH_FORMAT_OUTLINE && !pFT_Outline_Get_BBox(&((FT_OutlineGlyph)glyph)->outline, &bbox))
++    {
++        /* outline bbox is in 26.6 fixed-point units */
++    }
++    else
++    {
++        pFT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_SUBPIXELS, &bbox);
++    }
++
++    /* grid-fit to 64-unit (1 pixel) boundaries in 26.6 fixed-point.
++     * xMin/yMin round toward negative infinity (expanding the box outward on
++     * left/bottom edges), xMax/yMax round up (expanding on right/top edges). */
++    bbox.xMin = bbox.xMin & -64;
++    bbox.xMax = (bbox.xMax + 63) & -64;
++    bbox.yMin = bbox.yMin & -64;
++    bbox.yMax = (bbox.yMax + 63) & -64;
++
++    /* convert from 26.6 fixed-point to integer pixels */
++    bbox.xMin >>= 6;
++    bbox.xMax >>= 6;
++    bbox.yMin >>= 6;
++    bbox.yMax >>= 6;
++
+     pFT_Done_Glyph(glyph);
+     pFT_Done_Size(size);
+ 
+diff --git a/dlls/win32u/freetype.c b/dlls/win32u/freetype.c
+index 832043abaa3..f8e04f2559c 100644
+--- a/dlls/win32u/freetype.c
++++ b/dlls/win32u/freetype.c
+@@ -53,6 +53,7 @@
+ #include FT_SFNT_NAMES_H
+ #include FT_TRUETYPE_IDS_H
+ #include FT_OUTLINE_H
++#include FT_BBOX_H
+ #include FT_TRIGONOMETRY_H
+ #include FT_MODULE_H
+ #include FT_WINFONTS_H
+@@ -112,8 +113,12 @@ MAKE_FUNCPTR(FT_MulFix);
+ MAKE_FUNCPTR(FT_New_Face);
+ MAKE_FUNCPTR(FT_New_Memory_Face);
+ MAKE_FUNCPTR(FT_Outline_Embolden);
++MAKE_FUNCPTR(FT_Outline_Get_BBox);
+ MAKE_FUNCPTR(FT_Outline_Get_Bitmap);
+ MAKE_FUNCPTR(FT_Outline_Get_CBox);
++MAKE_FUNCPTR(FT_Outline_New);
++MAKE_FUNCPTR(FT_Outline_Copy);
++MAKE_FUNCPTR(FT_Outline_Done);
+ MAKE_FUNCPTR(FT_Outline_Transform);
+ MAKE_FUNCPTR(FT_Outline_Translate);
+ MAKE_FUNCPTR(FT_Property_Set);
+@@ -1488,8 +1493,12 @@ static BOOL init_freetype(void)
+     LOAD_FUNCPTR(FT_New_Face)
+     LOAD_FUNCPTR(FT_New_Memory_Face)
+     LOAD_FUNCPTR(FT_Outline_Embolden)
++    LOAD_FUNCPTR(FT_Outline_Get_BBox)
+     LOAD_FUNCPTR(FT_Outline_Get_Bitmap)
+     LOAD_FUNCPTR(FT_Outline_Get_CBox)
++    LOAD_FUNCPTR(FT_Outline_New)
++    LOAD_FUNCPTR(FT_Outline_Copy)
++    LOAD_FUNCPTR(FT_Outline_Done)
+     LOAD_FUNCPTR(FT_Outline_Transform)
+     LOAD_FUNCPTR(FT_Outline_Translate)
+     LOAD_FUNCPTR(FT_Property_Set)
+@@ -2446,7 +2455,8 @@ static FT_Vector get_advance_metric( struct gdi_font *font, FT_Pos base_advance,
+     return adv;
+ }
+ 
+-static FT_BBox get_transformed_bbox( const FT_Glyph_Metrics *metrics, const FT_Matrix *matrices )
++static FT_BBox get_transformed_bbox( FT_GlyphSlot glyph, const FT_Glyph_Metrics *metrics,
++                                     const FT_Matrix *matrices )
+ {
+     FT_BBox bbox = { 0, 0, 0, 0 };
+ 
+@@ -2457,6 +2467,27 @@ static FT_BBox get_transformed_bbox( const FT_Glyph_Metrics *metrics, const FT_M
+         bbox.yMax = (metrics->horiBearingY + 63) & -64;
+         bbox.yMin = (metrics->horiBearingY - metrics->height) & -64;
+     }
++    else if (glyph->format == FT_GLYPH_FORMAT_OUTLINE)
++    {
++        FT_Outline outline_copy;
++
++        if (pFT_Outline_New( library, glyph->outline.n_points, glyph->outline.n_contours, &outline_copy ) == 0)
++        {
++            pFT_Outline_Copy( &glyph->outline, &outline_copy );
++            pFT_Outline_Transform( &outline_copy, &matrices[matrix_vert] );
++
++            if (pFT_Outline_Get_BBox( &outline_copy, &bbox ))
++                bbox.xMin = bbox.xMax = bbox.yMin = bbox.yMax = 0;
++
++            pFT_Outline_Done( library, &outline_copy );
++        }
++
++        bbox.xMin = bbox.xMin & -64;
++        bbox.xMax = (bbox.xMax + 63) & -64;
++        bbox.yMin = bbox.yMin & -64;
++        bbox.yMax = (bbox.yMax + 63) & -64;
++        TRACE( "outline transformed box: (%ld, %ld - %ld, %ld)\n", bbox.xMin, bbox.yMax, bbox.xMax, bbox.yMin );
++    }
+     else
+     {
+         FT_Vector vec;
+@@ -3164,7 +3195,7 @@ static UINT freetype_get_glyph_outline( struct gdi_font *font, UINT glyph, UINT
+         /* metrics.width = min( metrics.width, ptm->tmMaxCharWidth << 6 ); */
+     }
+ 
+-    bbox = get_transformed_bbox( &metrics, matrices );
++    bbox = get_transformed_bbox( ft_face->glyph, &metrics, matrices );
+     compute_metrics( font, bbox, &metrics, tategaki, vertical_metrics, matrices, lpgm, abc );
+ 
+     switch (format)

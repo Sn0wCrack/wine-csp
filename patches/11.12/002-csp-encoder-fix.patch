@@ -1,0 +1,269 @@
+diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
+index f0716cc9abb..49ec65a7229 100644
+--- a/dlls/mfplat/main.c
++++ b/dlls/mfplat/main.c
+@@ -4175,9 +4175,22 @@ static HRESULT WINAPI bytestream_file_Flush(IMFByteStream *iface)
+ 
+ static HRESULT WINAPI bytestream_file_Close(IMFByteStream *iface)
+ {
+-    FIXME("%p\n", iface);
++    struct bytestream *stream = impl_from_IMFByteStream(iface);
++    HRESULT hr = S_OK;
+ 
+-    return E_NOTIMPL;
++    TRACE("%p\n", iface);
++
++    EnterCriticalSection(&stream->cs);
++    if (stream->hfile && stream->hfile != INVALID_HANDLE_VALUE)
++    {
++        FlushFileBuffers(stream->hfile);
++        if (!CloseHandle(stream->hfile))
++            hr = HRESULT_FROM_WIN32(GetLastError());
++        stream->hfile = INVALID_HANDLE_VALUE;
++    }
++    LeaveCriticalSection(&stream->cs);
++
++    return hr;
+ }
+ 
+ static HRESULT WINAPI bytestream_SetCurrentPosition(IMFByteStream *iface, QWORD position)
+diff --git a/dlls/mfreadwrite/writer.c b/dlls/mfreadwrite/writer.c
+index b697c41cb4a..8ef5cb13b25 100644
+--- a/dlls/mfreadwrite/writer.c
++++ b/dlls/mfreadwrite/writer.c
+@@ -35,6 +35,7 @@ enum writer_state
+ {
+     SINK_WRITER_STATE_INITIAL = 0,
+     SINK_WRITER_STATE_WRITING,
++    SINK_WRITER_STATE_FINALIZED,
+ };
+ 
+ struct marker_context
+@@ -715,14 +716,67 @@ static HRESULT sink_writer_process_sample(struct sink_writer *writer, struct str
+ static HRESULT sink_writer_encode_sample(struct sink_writer *writer, struct stream *stream, IMFSample *sample)
+ {
+     struct pending_item *item;
++    IMFSample *output_sample = sample;
++    LONGLONG time, duration;
++    HRESULT hr = S_OK;
++
++    if (stream->encoder)
++    {
++        MFT_OUTPUT_DATA_BUFFER output;
++        MFT_OUTPUT_STREAM_INFO info;
++        IMFMediaBuffer *buffer;
++        DWORD status;
++
++        hr = IMFTransform_ProcessInput(stream->encoder, 0, sample, 0);
++        if (FAILED(hr)) return hr;
++
++        hr = IMFTransform_GetOutputStreamInfo(stream->encoder, 0, &info);
++        if (FAILED(hr)) return hr;
++
++        hr = MFCreateSample(&output_sample);
++        if (FAILED(hr)) return hr;
++
++        hr = MFCreateMemoryBuffer(info.cbSize ? info.cbSize : 4 * 1024 * 1024, &buffer);
++        if (FAILED(hr))
++        {
++            IMFSample_Release(output_sample);
++            return hr;
++        }
++
++        IMFSample_AddBuffer(output_sample, buffer);
++        IMFMediaBuffer_Release(buffer);
+ 
+-    /* FIXME: call the encoder, queue its output */
++        memset(&output, 0, sizeof(output));
++        output.pSample = output_sample;
++
++        hr = IMFTransform_ProcessOutput(stream->encoder, 0, 1, &output, &status);
++        if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT)
++        {
++            IMFSample_Release(output_sample);
++            return S_OK;
++        }
++        if (FAILED(hr))
++        {
++            IMFSample_Release(output_sample);
++            return hr;
++        }
++
++        if (SUCCEEDED(IMFSample_GetSampleTime(sample, &time)))
++            IMFSample_SetSampleTime(output_sample, time);
++        if (SUCCEEDED(IMFSample_GetSampleDuration(sample, &duration)))
++            IMFSample_SetSampleDuration(output_sample, duration);
++    }
+ 
+     if (!(item = calloc(1, sizeof(*item))))
++    {
++        if (output_sample != sample)
++            IMFSample_Release(output_sample);
+         return E_OUTOFMEMORY;
++    }
+ 
+-    item->sample = sample;
+-    IMFSample_AddRef(item->sample);
++    item->sample = output_sample;
++    if (output_sample == sample)
++        IMFSample_AddRef(item->sample);
+     list_add_tail(&stream->queue, &item->entry);
+ 
+     return S_OK;
+@@ -898,9 +952,100 @@ static HRESULT WINAPI sink_writer_Flush(IMFSinkWriterEx *iface, DWORD index)
+ 
+ static HRESULT WINAPI sink_writer_Finalize(IMFSinkWriterEx *iface)
+ {
+-    FIXME("%p.\n", iface);
++    struct sink_writer *writer = impl_from_IMFSinkWriterEx(iface);
++    HRESULT hr = S_OK;
++    unsigned int i;
+ 
+-    return E_NOTIMPL;
++    TRACE("%p.\n", iface);
++
++    EnterCriticalSection(&writer->cs);
++
++    if (writer->state != SINK_WRITER_STATE_WRITING)
++    {
++        hr = MF_E_INVALIDREQUEST;
++    }
++    else
++    {
++        writer->state = SINK_WRITER_STATE_FINALIZED;
++
++        for (i = 0; i < writer->streams.count; i++)
++        {
++            struct stream *stream = &writer->streams.items[i];
++
++            if (stream->encoder)
++            {
++                IMFTransform_ProcessMessage(stream->encoder, MFT_MESSAGE_COMMAND_DRAIN, 0);
++
++                while (SUCCEEDED(hr))
++                {
++                    MFT_OUTPUT_DATA_BUFFER output;
++                    MFT_OUTPUT_STREAM_INFO info;
++                    IMFMediaBuffer *buffer;
++                    IMFSample *encoded_sample;
++                    struct pending_item *item;
++                    DWORD status;
++
++                    if (FAILED(IMFTransform_GetOutputStreamInfo(stream->encoder, 0, &info)))
++                        break;
++
++                    if (FAILED(MFCreateSample(&encoded_sample)))
++                        break;
++
++                    if (FAILED(MFCreateMemoryBuffer(info.cbSize ? info.cbSize : 1024 * 1024, &buffer)))
++                    {
++                        IMFSample_Release(encoded_sample);
++                        break;
++                    }
++
++                    IMFSample_AddBuffer(encoded_sample, buffer);
++                    IMFMediaBuffer_Release(buffer);
++
++                    memset(&output, 0, sizeof(output));
++                    output.pSample = encoded_sample;
++
++                    hr = IMFTransform_ProcessOutput(stream->encoder, 0, 1, &output, &status);
++                    if (FAILED(hr))
++                    {
++                        IMFSample_Release(encoded_sample);
++                        break;
++                    }
++
++                    if ((item = calloc(1, sizeof(*item))))
++                    {
++                        item->sample = encoded_sample;
++                        list_add_tail(&stream->queue, &item->entry);
++                    }
++                    else
++                    {
++                        IMFSample_Release(encoded_sample);
++                    }
++                }
++                hr = S_OK;
++            }
++
++            while (stream->stats.dwNumOutstandingSinkSampleRequests && !list_empty(&stream->queue))
++            {
++                sink_writer_process_sample(writer, stream);
++            }
++        }
++
++        if (writer->sink)
++        {
++            IMFFinalizableMediaSink *finalizable;
++
++            if (SUCCEEDED(IMFMediaSink_QueryInterface(writer->sink, &IID_IMFFinalizableMediaSink, (void **)&finalizable)))
++            {
++                hr = IMFFinalizableMediaSink_BeginFinalize(finalizable, NULL, NULL);
++                IMFFinalizableMediaSink_Release(finalizable);
++            }
++
++            hr = IMFMediaSink_Shutdown(writer->sink);
++        }
++    }
++
++    LeaveCriticalSection(&writer->cs);
++
++    return hr;
+ }
+ 
+ static HRESULT sink_writer_get_service(void *object, REFGUID service, REFIID riid, void **ret)
+diff --git a/dlls/winegstreamer/video_encoder.c b/dlls/winegstreamer/video_encoder.c
+index f26bec66c84..9a55dd11e93 100644
+--- a/dlls/winegstreamer/video_encoder.c
++++ b/dlls/winegstreamer/video_encoder.c
+@@ -729,6 +729,7 @@ static HRESULT video_encoder_create(const GUID *const *input_types, UINT input_t
+     encoder->output_type_count = output_type_count;
+ 
+     encoder->wg_transform_attrs.input_queue_length = 15;
++    encoder->wg_transform_attrs.preserve_timestamps = TRUE;
+ 
+     if (FAILED(hr = MFCreateAttributes(&encoder->attributes, 16)))
+         goto failed;
+@@ -751,6 +752,7 @@ failed:
+ 
+ static const GUID *const h264_encoder_input_types[] =
+ {
++    &MFVideoFormat_I420,
+     &MFVideoFormat_IYUV,
+     &MFVideoFormat_YV12,
+     &MFVideoFormat_NV12,
+diff --git a/dlls/winegstreamer/wg_transform.c b/dlls/winegstreamer/wg_transform.c
+index 1537a88d614..c8505d9ab20 100644
+--- a/dlls/winegstreamer/wg_transform.c
++++ b/dlls/winegstreamer/wg_transform.c
+@@ -107,6 +107,7 @@ static void align_video_info_planes(MFVideoInfo *video_info, gsize plane_align,
+         GstVideoInfo *info, GstVideoAlignment *align)
+ {
+     bool fix_nv12 = !plane_align && info->finfo->format == GST_VIDEO_FORMAT_NV12 && (info->width & 3) && (info->width & 3) != 3;
++    bool fix_i420 = !plane_align && (info->finfo->format == GST_VIDEO_FORMAT_I420 || info->finfo->format == GST_VIDEO_FORMAT_YV12);
+     const MFVideoArea *aperture = &video_info->MinimumDisplayAperture;
+ 
+     gst_video_alignment_reset(align);
+@@ -163,6 +164,21 @@ static void align_video_info_planes(MFVideoInfo *video_info, gsize plane_align,
+         info->size = info->offset[1] + info->stride[0] * aligned_height / 2;
+         align->stride_align[0] = 1;
+     }
++    else if (fix_i420 && !align->padding_left && !align->padding_top && !align->padding_right && !align->padding_bottom)
++    {
++        gint y_stride = info->width;
++        gint uv_stride = info->width / 2;
++        gint y_height = info->height;
++        gint uv_height = info->height / 2;
++        info->stride[0] = y_stride;
++        info->stride[1] = uv_stride;
++        info->stride[2] = uv_stride;
++        info->offset[0] = 0;
++        info->offset[1] = y_stride * y_height;
++        info->offset[2] = info->offset[1] + uv_stride * uv_height;
++        info->size = info->offset[2] + uv_stride * uv_height;
++        align->stride_align[0] = 0;
++    }
+     else
+     {
+         align->stride_align[0] = plane_align;
